@@ -1,45 +1,69 @@
+let fs = require("fs");
 const bodyParser = require("body-parser");
 const express = require("express");
-const request = require("request");
 const cors = require("cors");
 const sizeof = require("object-sizeof");
-const httpProxy = require("http-proxy");
 
 const Blockchain = require("./blockchain/blockchain");
-const PubSub = require("./publishsubscribe");
+const { json } = require("body-parser");
 
 const app = express();
 app.use(cors());
 
 const blockchain1 = new Blockchain();
 const blockchain2 = new Blockchain();
-const pubsub = new PubSub({ blockchain1, blockchain2 });
-
-const PORT = 5000;
-
-const ROOT_NODE_ADDRESS = `http://localhost:${PORT}`;
-setTimeout(() => pubsub.broadcastChain(), 1000);
 
 app.use(bodyParser.json());
 app.get("/api/blockchain1", (req, res) => {
-  res.json(blockchain1.chain);
+  fs.readFile("blockchain1.txt", function (err, data) {
+    if (err) {
+      console.log("error", err);
+    }
+    // console.log("data is ", data.toString());
+    // console.log("typeof", typeof data);
+
+    res.json(JSON.parse(data));
+  });
 });
 app.get("/api/blockchain2", (req, res) => {
-  res.json(blockchain2.chain);
+  // res.json(blockchain2.chain);
+  fs.readFile("blockchain2.txt", function (err, data) {
+    if (err) {
+      console.log("error", err);
+    }
+    // console.log("data is ", data.toString());
+    // console.log("typeof", typeof data);
+
+    res.json(JSON.parse(data));
+  });
 });
 
 app.post("/api/mine1", (req, res) => {
   const { data } = req.body;
 
   blockchain1.addBlock({ data });
-  pubsub.broadcastChain();
+
+  const bcString = JSON.stringify(blockchain1.chain);
+  fs.writeFile("blockchain1.txt", bcString, function (err) {
+    if (err) {
+      console.log("error", err);
+    }
+    console.log("success file is written");
+  });
   res.redirect("/api/blockchain1");
 });
 app.post("/api/mine2", (req, res) => {
   const { data } = req.body;
 
   blockchain2.addBlock({ data });
-  pubsub.broadcastChain();
+  const bcString = JSON.stringify(blockchain2.chain);
+  fs.writeFile("blockchain2.txt", bcString, function (err) {
+    if (err) {
+      console.log("error", err);
+    }
+    console.log("success file is written");
+  });
+
   res.redirect("/api/blockchain2");
 });
 
@@ -53,7 +77,6 @@ app.post("/api/mine20000", (req, res) => {
     console.log("data", data.difficulty);
     // const sizeObj = sizeof(data);
     blockchain1.addBlock({ data });
-    pubsub.broadcastChain();
     // totalSize += sizeObj;
     // console.log("Total size", totalSize);
   }
@@ -63,35 +86,8 @@ app.post("/api/mine20000", (req, res) => {
   res.redirect("/api/blocks");
 });
 
-const synChains1 = () => {
-  request(
-    { url: `${ROOT_NODE_ADDRESS}/api/blockchain1` },
-    (error, response, body) => {
-      if (!error && response.statusCode === 200) {
-        const rootChain = JSON.parse(body);
-        console.log("Replace chain on sync with", rootChain);
-        blockchain1.replaceChain(rootChain);
-      }
-    }
-  );
-};
-
-const synChains2 = () => {
-  request(
-    { url: `${ROOT_NODE_ADDRESS}/api/blockchain2` },
-    (error, response, body) => {
-      if (!error && response.statusCode === 200) {
-        const rootChain = JSON.parse(body);
-        console.log("Replace chain on sync with", rootChain);
-        blockchain2.replaceChain(rootChain);
-      }
-    }
-  );
-};
-
+const PORT = 5000;
 
 app.listen(PORT, () => {
   console.log(`listening to PORT:${PORT}`);
-  synChains1();
-  synChains2();
 });
